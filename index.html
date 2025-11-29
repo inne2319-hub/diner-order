@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>每週學生訂餐系統</title>
+    <style>
+        /* 樣式保持不變，為了版面整潔這裡省略重複的 CSS，直接使用即可 */
+        :root { --primary-color: #4CAF50; --bg-color: #f4f4f9; }
+        body { font-family: '微軟正黑體', sans-serif; margin: 0; padding: 20px; background-color: var(--bg-color); display: flex; flex-direction: column; align-items: center; }
+        .container { max-width: 800px; width: 100%; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        h1 { text-align: center; color: #333; }
+        .tabs { display: flex; justify-content: space-around; margin-bottom: 20px; border-bottom: 2px solid #ddd; }
+        .tab-btn { padding: 10px 20px; border: none; background: none; cursor: pointer; font-size: 16px; font-weight: bold; color: #666; }
+        .tab-btn.active { color: var(--primary-color); border-bottom: 3px solid var(--primary-color); }
+        .menu-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 15px; }
+        .food-card { border: 1px solid #eee; border-radius: 8px; padding: 15px; text-align: center; transition: transform 0.2s; }
+        .food-card:hover { transform: translateY(-3px); box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        .food-name { font-size: 1.1em; margin-bottom: 5px; font-weight: bold; }
+        .food-price { color: #e91e63; font-weight: bold; }
+        .add-btn { margin-top: 10px; padding: 5px 15px; background-color: var(--primary-color); color: white; border: none; border-radius: 5px; cursor: pointer; }
+        .add-btn:hover { background-color: #45a049; }
+        .cart-section { margin-top: 30px; padding-top: 20px; border-top: 2px dashed #ccc; }
+        .cart-item { display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid #f0f0f0; }
+        .total-price { text-align: right; font-size: 1.2em; font-weight: bold; margin-top: 10px; color: #333; }
+        .submit-area { margin-top: 20px; text-align: center; }
+        input[type="text"] { padding: 10px; width: 60%; border: 1px solid #ccc; border-radius: 5px; margin-bottom: 10px; }
+        .checkout-btn { padding: 10px 30px; background-color: #2196F3; color: white; border: none; border-radius: 5px; font-size: 1.1em; cursor: pointer; width: 100%; transition: background-color 0.3s; }
+        .checkout-btn:disabled { background-color: #ccc; cursor: not-allowed; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>🍱 學生午餐訂購系統</h1>
+    <p style="text-align:center; color:#666;">請選擇星期查看菜單</p>
+
+    <div class="tabs" id="dayTabs"></div>
+    <div id="menuContainer" class="menu-list"></div>
+
+    <div class="cart-section">
+        <h3>🛒 我的訂單</h3>
+        <div id="cartItems"><p style="color:#999; text-align:center;">尚未選擇餐點</p></div>
+        <div class="total-price">總計: $<span id="totalPrice">0</span></div>
+        
+        <div class="submit-area">
+            <input type="text" id="studentName" placeholder="請輸入班級座號姓名 (例: 301-05 王小明)">
+            <button id="submitBtn" class="checkout-btn" onclick="submitOrder()">送出訂單</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    // ==========================================
+    // 🚨 設定區域：請將這裡的網址換成你的 Web App URL
+    // ==========================================
+    const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyZIjAEVjP2TVqfE9mMLMdBKlx40W7-jivNomG9p_nqiWUJ_zEUyBuirkKLHYf4WxHE/exec"
+    // ==========================================
+
+    const weeklyMenu = {
+        "週一": [{ name: "香滷雞腿飯", price: 80 }, { name: "咖哩豬排飯", price: 85 }, { name: "素食燴飯", price: 70 }],
+        "週二": [{ name: "紅燒牛腩飯", price: 90 }, { name: "炸魚排便當", price: 80 }, { name: "番茄蛋炒飯", price: 65 }],
+        "週三": [{ name: "快樂兒童餐", price: 100 }, { name: "肉燥乾麵+湯", price: 60 }, { name: "蔬菜拌飯", price: 60 }],
+        "週四": [{ name: "照燒雞肉飯", price: 80 }, { name: "黑胡椒豬柳", price: 85 }, { name: "什錦湯麵", price: 70 }],
+        "週五": [{ name: "卡拉雞腿堡", price: 75 }, { name: "義大利肉醬麵", price: 80 }, { name: "水果沙拉餐", price: 70 }]
+    };
+
+    let currentDay = "週一";
+    let cart = [];
+
+    function init() {
+        const tabsContainer = document.getElementById('dayTabs');
+        const days = Object.keys(weeklyMenu);
+        days.forEach((day, index) => {
+            const btn = document.createElement('button');
+            btn.className = `tab-btn ${index === 0 ? 'active' : ''}`;
+            btn.innerText = day;
+            btn.onclick = () => switchTab(day, btn);
+            tabsContainer.appendChild(btn);
+        });
+        renderMenu(days[0]);
+    }
+
+    function switchTab(day, btn) {
+        currentDay = day;
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        renderMenu(day);
+    }
+
+    function renderMenu(day) {
+        const container = document.getElementById('menuContainer');
+        container.innerHTML = '';
+        weeklyMenu[day].forEach(item => {
+            const card = document.createElement('div');
+            card.className = 'food-card';
+            card.innerHTML = `
+                <div class="food-name">${item.name}</div>
+                <div class="food-price">$${item.price}</div>
+                <button class="add-btn" onclick="addToCart('${day}', '${item.name}', ${item.price})">加入</button>
+            `;
+            container.appendChild(card);
+        });
+    }
+
+    function addToCart(day, name, price) {
+        cart.push({ day, name, price });
+        updateCartUI();
+    }
+
+    function updateCartUI() {
+        const cartContainer = document.getElementById('cartItems');
+        const totalSpan = document.getElementById('totalPrice');
+        if (cart.length === 0) {
+            cartContainer.innerHTML = '<p style="color:#999; text-align:center;">尚未選擇餐點</p>';
+            totalSpan.innerText = '0';
+            return;
+        }
+        let html = '';
+        let total = 0;
+        cart.forEach((item, index) => {
+            html += `<div class="cart-item"><span>[${item.day}] ${item.name}</span><span>$${item.price} <a href="#" onclick="removeFromCart(${index})" style="color:red;text-decoration:none;margin-left:10px;">✕</a></span></div>`;
+            total += item.price;
+        });
+        cartContainer.innerHTML = html;
+        totalSpan.innerText = total;
+    }
+
+    function removeFromCart(index) {
+        cart.splice(index, 1);
+        updateCartUI();
+    }
+
+    // ==========================================
+    // 🚀 送出訂單的核心邏輯 (連動 Google Sheet)
+    // ==========================================
+    function submitOrder() {
+        const name = document.getElementById('studentName').value;
+        const submitBtn = document.getElementById('submitBtn');
+
+        if (GOOGLE_SCRIPT_URL.includes("你的_Google_Apps_Script_網址")) {
+            alert("⚠️ 錯誤：你還沒有在程式碼中貼上 Google Script 的網址喔！");
+            return;
+        }
+        if (!name) { alert('請輸入班級座號姓名！'); return; }
+        if (cart.length === 0) { alert('購物車是空的喔！'); return; }
+
+        // 1. 準備資料
+        const orderData = {
+            name: name,
+            cart: cart,
+            total: parseInt(document.getElementById('totalPrice').innerText)
+        };
+
+        // 2. 鎖定按鈕避免重複發送
+        submitBtn.disabled = true;
+        submitBtn.innerText = "資料傳送中...";
+
+        // 3. 發送資料到 Google Sheet
+        // 使用 text/plain 是為了避免跨域 (CORS) 的複雜問題，這是 Google Apps Script 的小技巧
+        fetch(GOOGLE_SCRIPT_URL, {
+            method: 'POST',
+            body: JSON.stringify(orderData),
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' }, 
+        })
+        .then(response => response.json())
+        .then(data => {
+            if(data.result === 'success'){
+                alert(`✅ 訂購成功！\n\n${name} 的訂單已送出。`);
+                // 清空購物車
+                cart = [];
+                updateCartUI();
+                document.getElementById('studentName').value = '';
+            } else {
+                alert('❌ 發生錯誤，請稍後再試。');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('❌ 連線失敗，請檢查網路或聯絡管理員。');
+        })
+        .finally(() => {
+            // 恢復按鈕
+            submitBtn.disabled = false;
+            submitBtn.innerText = "送出訂單";
+        });
+    }
+
+    init();
+</script>
+
+</body>
+</html>
